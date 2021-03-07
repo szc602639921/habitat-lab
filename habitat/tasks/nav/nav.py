@@ -6,7 +6,7 @@
 
 # TODO, lots of typing errors in here
 
-from typing import TYPE_CHECKING, Any, List, Optional, Tuple, Type
+from typing import Any, List, Optional, Tuple
 
 import attr
 import numpy as np
@@ -38,17 +38,17 @@ from habitat.utils.geometry_utils import (
 )
 from habitat.utils.visualizations import fog_of_war, maps
 
-if TYPE_CHECKING:
+try:
     from habitat.sims.habitat_simulator.habitat_simulator import HabitatSim
+except ImportError:
+    pass
 cv2 = try_cv2_import()
 
 
 MAP_THICKNESS_SCALAR: int = 128
 
 
-def merge_sim_episode_config(
-    sim_config: Config, episode: Type[Episode]
-) -> Any:
+def merge_sim_episode_config(sim_config: Config, episode: Episode) -> Any:
     sim_config.defrost()
     sim_config.SCENE = episode.scene_id
     sim_config.freeze()
@@ -731,26 +731,28 @@ class TopDownMap(Measure):
     def _draw_goals_view_points(self, episode):
         if self._config.DRAW_VIEW_POINTS:
             for goal in episode.goals:
-                try:
-                    if goal.view_points is not None:
-                        for view_point in goal.view_points:
-                            self._draw_point(
-                                view_point.agent_state.position,
-                                maps.MAP_VIEW_POINT_INDICATOR,
-                            )
-                except AttributeError:
-                    pass
+                if self._is_on_same_floor(goal.position[1]):
+                    try:
+                        if goal.view_points is not None:
+                            for view_point in goal.view_points:
+                                self._draw_point(
+                                    view_point.agent_state.position,
+                                    maps.MAP_VIEW_POINT_INDICATOR,
+                                )
+                    except AttributeError:
+                        pass
 
     def _draw_goals_positions(self, episode):
         if self._config.DRAW_GOAL_POSITIONS:
 
             for goal in episode.goals:
-                try:
-                    self._draw_point(
-                        goal.position, maps.MAP_TARGET_POINT_INDICATOR
-                    )
-                except AttributeError:
-                    pass
+                if self._is_on_same_floor(goal.position[1]):
+                    try:
+                        self._draw_point(
+                            goal.position, maps.MAP_TARGET_POINT_INDICATOR
+                        )
+                    except AttributeError:
+                        pass
 
     def _draw_goals_aabb(self, episode):
         if self._config.DRAW_GOAL_AABBS:
@@ -778,6 +780,7 @@ class TopDownMap(Measure):
                             (x_len, -z_len),
                             (-x_len, -z_len),
                         ]
+                        if self._is_on_same_floor(center[1])
                     ]
 
                     map_corners = [
@@ -820,6 +823,13 @@ class TopDownMap(Measure):
                 maps.MAP_SHORTEST_PATH_COLOR,
                 self.line_thickness,
             )
+
+    def _is_on_same_floor(
+        self, height, ref_floor_height=None, ceiling_height=2.0
+    ):
+        if ref_floor_height is None:
+            ref_floor_height = self._sim.get_agent(0).state.position[1]
+        return ref_floor_height < height < ref_floor_height + ceiling_height
 
     def reset_metric(self, episode, *args: Any, **kwargs: Any):
         self._step_count = 0
@@ -1093,9 +1103,7 @@ class NavigationTask(EmbodiedTask):
     ) -> None:
         super().__init__(config=config, sim=sim, dataset=dataset)
 
-    def overwrite_sim_config(
-        self, sim_config: Any, episode: Type[Episode]
-    ) -> Any:
+    def overwrite_sim_config(self, sim_config: Any, episode: Episode) -> Any:
         return merge_sim_episode_config(sim_config, episode)
 
     def _check_episode_is_active(self, *args: Any, **kwargs: Any) -> bool:
