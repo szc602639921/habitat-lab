@@ -122,7 +122,7 @@ def _to_tensor(v) -> torch.Tensor:
     if torch.is_tensor(v):
         return v
     elif isinstance(v, np.ndarray):
-        return torch.from_numpy(v)
+        return torch.from_numpy(v.astype(np.float))
     else:
         return torch.tensor(v, dtype=torch.float)
 
